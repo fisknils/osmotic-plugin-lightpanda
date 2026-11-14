@@ -20,12 +20,10 @@ Osmotic.get('https://quotes.toscrape.com/js/')
 - Every page is rendered by default; nothing else in the chain changes
 - `robots.txt`, `Crawl-delay`, `maxPages`, concurrency and events work as before
 - Per-slot proxies, user agents and headers are applied in the browser
-- Wait for the network to go idle, or for a selector, before the HTML is captured
+- Wait for the network to go idle, or for a selector, and click or fill in forms before the HTML is captured
 - Block scripts, `fetch()` requests and other resources
 - One shared Lightpanda process, started when first needed and stopped when the run ends, or one you run yourself
 - Page scripts run in Lightpanda's own process, never in Node's
-
-This is version 0.x: there is no `actions` option yet. See [Limits](#limits).
 
 ## Installation
 
@@ -93,6 +91,17 @@ Middleware that needs to see or change requests must come before it: load its pl
 - Headers it adds are sent by the browser. A `Cookie` header is set as cookies for the page's site in the browser
   context, so the page's own requests to that site send them too, and other sites don't.
 - It sees the page's response headers, `Set-Cookie` once per cookie.
+- Responses it handles itself, such as a challenge it solves, can be returned to it unrendered with
+  [`passThrough`](#render-options).
+
+```js
+Osmotic.plugins([
+	require('some-middleware-plugin'),
+	require('osmotic-plugin-lightpanda')({
+		passThrough: (res) => res.headers['x-challenge'] === '1',
+	}),
+]);
+```
 
 ## Commands
 
@@ -128,12 +137,14 @@ Fetches the pages loaded after this step without the browser, as plain osmotic w
 
 These can be set when loading the plugin, as defaults for every page, and with `render()`.
 
-| Option      | Default  | Description                                                                             |
-| ----------- | -------- | --------------------------------------------------------------------------------------- |
-| `waitUntil` | `'load'` | When navigation is done: `'load'`, `'domcontentloaded'`, `'networkidle'` or `'commit'`. |
-| `waitFor`   | none     | Wait until an element matching this CSS selector is in the page.                        |
-| `timeout`   | `30000`  | Milliseconds for the response, again for `waitUntil`, and again for `waitFor`.          |
-| `block`     | `[]`     | Resource types to fail, such as `'script'`, `'xhr'`, `'fetch'` or `'image'`.            |
+| Option        | Default  | Description                                                                                                      |
+| ------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `waitUntil`   | `'load'` | When navigation is done: `'load'`, `'domcontentloaded'`, `'networkidle'` or `'commit'`.                          |
+| `waitFor`     | none     | Wait until an element matching this CSS selector is in the page.                                                 |
+| `timeout`     | `30000`  | Milliseconds for the response, again for `waitUntil`, and again for `waitFor`.                                   |
+| `block`       | `[]`     | Resource types to fail, such as `'script'`, `'xhr'`, `'fetch'` or `'image'`.                                     |
+| `actions`     | none     | `async (page, url) => {}`, run before the HTML is captured. See [the page handle](#actions-and-the-page-handle). |
+| `passThrough` | none     | `({ url, status, headers }) => boolean`. Matching responses are returned as sent, unrendered.                    |
 
 `'networkidle'` waits until the page has made no requests for 500 ms, which suits pages that load their content with
 `fetch()` after the `load` event. `'commit'` captures the page as soon as the response arrives.
@@ -142,9 +153,45 @@ These can be set when loading the plugin, as defaults for every page, and with `
 the page. Lightpanda reports `fetch()` requests as `'xhr'`, so `'fetch'` and `'xhr'` both block them. Lightpanda
 doesn't load images or stylesheets unless told to (see [`args`](#options)).
 
-`waitFor` only runs for 2xx HTML responses. It takes a CSS selector, checked with the page's own
-`document.querySelector()`; modern selectors such as `:has()` and `:is()` work. osmotic's own selector extras, such as
-`:text-is()`, and Playwright's `text=` forms are not available there.
+`waitFor` and `actions` only run for 2xx HTML responses. A response `passThrough` matches is returned as soon as it
+arrives, with the server's body and headers, whatever its status: no `waitUntil`, `waitFor` or `actions`, and the
+page's scripts don't get to change it. `headers` has lowercase names.
+
+`waitFor` takes a CSS selector, checked with the page's own `document.querySelector()`; modern selectors such as
+`:has()` and `:is()` work. osmotic's own selector extras, such as `:text-is()`, and Playwright's `text=` forms are not
+available there.
+
+### `actions` and the page handle
+
+`actions` gets a small handle on the page, not a Playwright `Page`:
+
+| Method                           | Does                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `evaluate(fn, arg)`              | Calls `fn(arg)` in the page and returns the result, awaited. A string is evaluated too.                      |
+| `click(selector)`                | Calls `click()` on the first matching element. Fails if there is none.                                       |
+| `fill(selector, value)`          | Sets the element's value and fires `input` and `change`. Fails if there is none.                             |
+| `waitFor(selector, { timeout })` | Waits for an element matching the CSS selector. `timeout` defaults to the render option's.                   |
+| `content()`, `url()`             | The page's current HTML and URL.                                                                             |
+| `send(method, params)`           | Sends a [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/) command to the page. |
+
+```js
+.render({
+	actions: async (page) => {
+		await page.fill('#search', 'lightpanda');
+		await page.click('button[type=submit]');
+		await page.waitFor('.results li');
+	},
+})
+```
+
+Code passed to `evaluate()` runs in the page, in Lightpanda, not in Node: it is sent as source code, so it can't use
+variables from the surrounding Node code. Pass what it needs as `arg`, which, like the result, must survive
+`JSON.stringify()`. `click()` calls the element's `click()` method rather than moving a mouse, since Lightpanda doesn't
+lay pages out.
+
+If an action makes the page navigate, such as by submitting a form, wait for something on the new page with
+`waitFor()` before returning. The HTML and URL are captured from the page loaded when `actions` returns, while the
+status and headers stay those of the first response.
 
 ## Options
 
@@ -166,8 +213,9 @@ Osmotic.plugins([
 ]);
 ```
 
-`lightpanda help serve` lists the arguments Lightpanda takes. Some useful ones: `--timezone`, `--locale`, `--block-urls`, `--load-resources image` (Lightpanda doesn't load images or
-stylesheets by default), and `--obey-robots`.
+`lightpanda help serve` lists the arguments Lightpanda takes. Some useful ones: `--timezone`, `--locale`,
+`--block-urls`, `--load-resources image` (Lightpanda doesn't load images or stylesheets by default), and
+`--obey-robots`.
 
 ## osmotic options in the browser
 
@@ -231,7 +279,8 @@ WebKit:
 - It doesn't paint pages: no screenshots, PDFs or layout-dependent behavior.
 - It doesn't load images or stylesheets unless `--load-resources` says so.
 - It names itself in the `Sec-CH-UA` client hints, whatever the user agent.
-- In this version, there are no `actions` or `passThrough` options as in the Playwright plugin.
+- `actions` gets [a small page handle](#actions-and-the-page-handle) instead of Playwright's `Page`, so actions
+  written for the Playwright plugin need rewriting. There is no mouse or keyboard input.
 - Lightpanda only publishes nightly builds, which `@lightpanda/browser` installs. This version was tested with
   `1.1.0-nightly.12159`.
 
@@ -241,7 +290,12 @@ Type declarations are included. Loading the package's types also declares `rende
 are exported:
 
 ```ts
-import lightpanda, { type LightpandaPluginOptions, type RenderOptions } from 'osmotic-plugin-lightpanda';
+import lightpanda, {
+	type LightpandaPage,
+	type LightpandaPluginOptions,
+	type PassThroughResponse,
+	type RenderOptions,
+} from 'osmotic-plugin-lightpanda';
 ```
 
 ## Development
@@ -266,6 +320,7 @@ run.
 | `src/core/start-lightpanda.ts`    | Starting and stopping `lightpanda serve`                  |
 | `src/core/CdpConnection.ts`       | A minimal Chrome DevTools Protocol client on `WebSocket`  |
 | `src/core/PageSession.ts`         | One page: its commands, events and scripts                |
+| `src/core/PageHandle.ts`          | The page handle `actions` get                             |
 | `src/core/render-page.ts`         | Loading a page and capturing its HTML                     |
 | `src/types/options.ts`            | Options types and the `render()` declaration              |
 | `src/utils/`                      | Helpers: finding the binary, headers, timeouts, responses |

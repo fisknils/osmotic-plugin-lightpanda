@@ -41,6 +41,57 @@ export interface RenderOptions {
 	 * @defaultValue `[]`
 	 */
 	block?: string[];
+	/**
+	 * Runs after the page loads and `waitFor` matched, before the HTML is captured. Use it to
+	 * click, fill in forms or wait for content. Only called for 2xx HTML responses.
+	 */
+	actions?: (page: LightpandaPage, url: string) => unknown;
+	/**
+	 * Return the responses this matches as the server sent them, without rendering: right
+	 * away, with the raw body, without waiting for `waitUntil`, `waitFor` or `actions`.
+	 * For fetch middleware in front of the plugin that handles such responses itself.
+	 */
+	passThrough?: (response: PassThroughResponse) => boolean;
+}
+
+/** The response {@link RenderOptions.passThrough} decides on. */
+export interface PassThroughResponse {
+	/** The URL after redirects. */
+	url: string;
+	status: number;
+	/** Response headers, with lowercase names. Repeated headers are joined by newlines. */
+	headers: Record<string, string>;
+}
+
+/**
+ * The page {@link RenderOptions.actions} works on. Scripts it runs, such as functions passed
+ * to `evaluate()`, run in the page in Lightpanda, not in Node.
+ */
+export interface LightpandaPage {
+	/** Evaluate a JavaScript expression in the page, and return its value, awaited if it's a promise. */
+	evaluate(expression: string): Promise<unknown>;
+	/**
+	 * Call `fn` in the page with `arg`, and return its result, awaited if it's a promise. `fn` is sent
+	 * as source code, so it can't use variables from Node; pass what it needs as `arg`, which
+	 * must survive `JSON.stringify()`, as must the result.
+	 */
+	evaluate<R, A>(fn: (arg: A) => R, arg: A): Promise<Awaited<R>>;
+	evaluate<R>(fn: () => R): Promise<Awaited<R>>;
+	/** Call `click()` on the first element matching `selector`. Fails if none does. */
+	click(selector: string): Promise<void>;
+	/** Set the value of the first element matching `selector`, and fire `input` and `change`. Fails if none does. */
+	fill(selector: string, value: string): Promise<void>;
+	/**
+	 * Wait until an element matching `selector` is in the page.
+	 * @param options.timeout - Milliseconds before it fails. Defaults to the render `timeout`.
+	 */
+	waitFor(selector: string, options?: { timeout?: number }): Promise<void>;
+	/** The page's current HTML, with its doctype. */
+	content(): Promise<string>;
+	/** The page's current URL. */
+	url(): Promise<string>;
+	/** Send a Chrome DevTools Protocol command to the page, and return its result. */
+	send(method: string, params?: object): Promise<any>;
 }
 
 /** Options for the plugin. Render options set here are the defaults for every page. */

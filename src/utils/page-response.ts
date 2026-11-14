@@ -10,7 +10,7 @@ const BODY_HEADERS = new Set(['content-length', 'content-encoding', 'transfer-en
  * `headers` are the page's response headers, repeated ones such as `set-cookie` once each.
  */
 export function pageResponse(
-	body: string | null,
+	body: string | Uint8Array<ArrayBuffer> | null,
 	status: number,
 	type: string,
 	url: string,

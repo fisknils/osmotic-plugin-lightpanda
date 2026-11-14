@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
+### Added
+
+- `actions` render option, with a page handle: `evaluate()`, `click()`, `fill()`, `waitFor()`, `content()`, `url()`
+  and `send()` for raw CDP commands. Its scripts run in the page, in Lightpanda.
+- `passThrough` render option, to return matching responses as the server sent them, unrendered.
+- `LightpandaPage` and `PassThroughResponse` types.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
