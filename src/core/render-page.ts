@@ -6,6 +6,7 @@ import { requestCookies } from '../utils/request-cookies.js';
 import { splitHeaders } from '../utils/split-headers.js';
 import { withTimeout } from '../utils/with-timeout.js';
 import type { CdpConnection, CdpEvent } from './CdpConnection.js';
+import { PageHandle } from './PageHandle.js';
 import { PageSession } from './PageSession.js';
 
 /** The browser context pages are opened in, on its own connection. */
@@ -18,9 +19,6 @@ const DEFAULT_TIMEOUT = 30000;
 
 // waitUntil values, as names of Page.lifecycleEvent
 const LIFECYCLE = { load: 'load', domcontentloaded: 'DOMContentLoaded', networkidle: 'networkIdle' } as const;
-
-// How often waitFor checks for its selector
-const POLL_MS = 50;
 
 /** Load `req.url` in a new page in `context` and return the rendered HTML as a Response. */
 export async function renderPage(
@@ -59,6 +57,13 @@ export async function renderPage(
 		const { url, status, headers, mimeType } = event.params.response;
 		const resHeaders = splitHeaders(headers ?? {});
 		const type = resHeaders.find((h) => h.name.toLowerCase() === 'content-type')?.value ?? mimeType ?? 'text/html';
+		// For middleware in front, as sent, before the page's scripts can act on it
+		if (options.passThrough?.({ url, status, headers: lowercaseKeys(headers ?? {}) })) {
+			const { body, base64Encoded } = await page.send('Network.getResponseBody', {
+				requestId: event.params.requestId,
+			});
+			return pageResponse(base64Encoded ? Buffer.from(body, 'base64') : body, status, type, url, resHeaders);
+		}
 		// osmotic skips these anyway, so don't wait for content that won't come
 		if (status < 200 || status > 299 || !type.includes('html'))
 			return pageResponse(null, status, type, url, resHeaders);
@@ -72,13 +77,12 @@ export async function renderPage(
 				`${waitUntil} on ${url}`,
 			);
 		}
-		if (options.waitFor) await waitForSelector(page, options.waitFor, timeout);
+		const handle = new PageHandle(page, timeout);
+		if (options.waitFor) await handle.waitFor(options.waitFor);
+		await options.actions?.(handle, req.url);
 
-		const { root } = await page.send('DOM.getDocument', { depth: 0 });
-		const { outerHTML } = await page.send('DOM.getOuterHTML', { nodeId: root.nodeId });
 		// The URL now, which scripts may have changed with history.pushState()
-		const finalUrl = await page.evaluate<string>('location.href');
-		return pageResponse(outerHTML, status, type, finalUrl, resHeaders);
+		return pageResponse(await handle.content(), status, type, await handle.url(), resHeaders);
 	} finally {
 		page?.dispose();
 		await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
@@ -107,14 +111,4 @@ async function applyRequest(page: PageSession, req: FetchRequest, block: string[
 			.catch(() => {}); // The page may have closed meanwhile
 	});
 	await page.send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
-}
-
-// Resolve once an element matches `selector`, checking every POLL_MS
-async function waitForSelector(page: PageSession, selector: string, timeout: number): Promise<void> {
-	const deadline = Date.now() + timeout;
-	const expression = `!!document.querySelector(${JSON.stringify(selector)})`;
-	while (!(await page.evaluate<boolean>(expression))) {
-		if (Date.now() >= deadline) throw new Error(`Timed out after ${timeout} ms waiting for ${selector}`);
-		await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-	}
 }

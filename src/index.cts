@@ -18,6 +18,8 @@ function lightpanda(options?: options.LightpandaPluginOptions): OsmoticPlugin {
 namespace lightpanda {
 	export type LightpandaPluginOptions = options.LightpandaPluginOptions;
 	export type RenderOptions = options.RenderOptions;
+	export type PassThroughResponse = options.PassThroughResponse;
+	export type LightpandaPage = options.LightpandaPage;
 }
 
 // module.exports is the function itself, so require() can pass it straight to plugins()

@@ -2,4 +2,4 @@
 import lightpanda from './index.cjs';
 
 export default lightpanda;
-export type { LightpandaPluginOptions, RenderOptions } from './types/options.js';
+export type { LightpandaPage, LightpandaPluginOptions, PassThroughResponse, RenderOptions } from './types/options.js';
