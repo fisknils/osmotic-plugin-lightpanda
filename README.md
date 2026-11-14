@@ -19,12 +19,13 @@ Osmotic.get('https://quotes.toscrape.com/js/')
 
 - Every page is rendered by default; nothing else in the chain changes
 - `robots.txt`, `Crawl-delay`, `maxPages`, concurrency and events work as before
+- Per-slot proxies, user agents and headers are applied in the browser
 - Wait for the network to go idle, or for a selector, before the HTML is captured
+- Block scripts, `fetch()` requests and other resources
 - One shared Lightpanda process, started when first needed and stopped when the run ends, or one you run yourself
 - Page scripts run in Lightpanda's own process, never in Node's
 
-This is version 0.x: osmotic's headers, user agent and proxies aren't applied in the browser yet, and there are no
-`block` or `actions` options. See [Limits](#limits).
+This is version 0.x: there is no `actions` option yet. See [Limits](#limits).
 
 ## Installation
 
@@ -83,9 +84,15 @@ timeouts are reported as `error` events.
 
 `robots.txt` is still fetched directly, without the browser.
 
+### Middleware in front of the plugin
+
 The plugin makes the request itself and doesn't call `next()`, so fetch middleware loaded after it never runs.
-Middleware that needs to see responses must come before it: load its plugin first, or add it with the chain's
-`useFetch()`. It sees the page's response headers, `Set-Cookie` once per cookie.
+Middleware that needs to see or change requests must come before it: load its plugin first, or add it with the chain's
+`useFetch()`.
+
+- Headers it adds are sent by the browser. A `Cookie` header is set as cookies for the page's site in the browser
+  context, so the page's own requests to that site send them too, and other sites don't.
+- It sees the page's response headers, `Set-Cookie` once per cookie.
 
 ## Commands
 
@@ -126,9 +133,14 @@ These can be set when loading the plugin, as defaults for every page, and with `
 | `waitUntil` | `'load'` | When navigation is done: `'load'`, `'domcontentloaded'`, `'networkidle'` or `'commit'`. |
 | `waitFor`   | none     | Wait until an element matching this CSS selector is in the page.                        |
 | `timeout`   | `30000`  | Milliseconds for the response, again for `waitUntil`, and again for `waitFor`.          |
+| `block`     | `[]`     | Resource types to fail, such as `'script'`, `'xhr'`, `'fetch'` or `'image'`.            |
 
 `'networkidle'` waits until the page has made no requests for 500 ms, which suits pages that load their content with
 `fetch()` after the `load` event. `'commit'` captures the page as soon as the response arrives.
+
+`block` fails matching requests before they're sent, so a blocked script never runs and a blocked `fetch()` rejects in
+the page. Lightpanda reports `fetch()` requests as `'xhr'`, so `'fetch'` and `'xhr'` both block them. Lightpanda
+doesn't load images or stylesheets unless told to (see [`args`](#options)).
 
 `waitFor` only runs for 2xx HTML responses. It takes a CSS selector, checked with the page's own
 `document.querySelector()`; modern selectors such as `:has()` and `:is()` work. osmotic's own selector extras, such as
@@ -154,9 +166,25 @@ Osmotic.plugins([
 ]);
 ```
 
-`lightpanda help serve` lists the arguments Lightpanda takes. Some useful ones: `--http-proxy` (one proxy for every
-page), `--timezone`, `--locale`, `--block-urls`, `--load-resources image` (Lightpanda doesn't load images or
+`lightpanda help serve` lists the arguments Lightpanda takes. Some useful ones: `--timezone`, `--locale`, `--block-urls`, `--load-resources image` (Lightpanda doesn't load images or
 stylesheets by default), and `--obey-robots`.
+
+## osmotic options in the browser
+
+| osmotic option         | In the browser                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `userAgent`            | The page's user agent, so `navigator.userAgent` matches the header.                     |
+| `headers`              | Sent with every request the page makes. `Cookie` goes to the page's site only.          |
+| `slots[].proxy`        | The proxy for that slot's pages. Credentials in the URL (`http://user:pass@host`) work. |
+| `concurrency`, `slots` | One page per slot at most, so they limit open pages too.                                |
+| `delay`, `maxPages`    | As before: they apply to page loads, not to the requests a page makes.                  |
+
+The plugin keeps one browser context per proxy, so cookies persist across pages loaded through the same proxy, as in a
+normal browser session.
+
+osmotic's default user agent, `osmotic/0.1`, is sent by the browser too. Some sites treat unknown user agents
+differently; set `userAgent` if pages don't render as they do in your own browser. Lightpanda still names itself in
+the `Sec-CH-UA` client hints.
 
 ## Lightpanda
 
@@ -175,9 +203,6 @@ The process listens on a free port on `127.0.0.1` only. The plugin turns off Lig
 If none is there, the page fails with an error saying how to install it.
 
 With `endpoint`, the plugin connects to that Lightpanda instead and never starts or stops it.
-
-Pages share one browser context, so cookies that sites set persist across pages, as in a normal browser session, until
-the process stops.
 
 ### Lightpanda in a container
 
@@ -205,10 +230,8 @@ WebKit:
 - Its Web API support is partial, so some sites don't render as in a full browser. Use the Playwright plugin for those.
 - It doesn't paint pages: no screenshots, PDFs or layout-dependent behavior.
 - It doesn't load images or stylesheets unless `--load-resources` says so.
-- It identifies itself as `Lightpanda/1.0` in the `User-Agent` and client hints.
-- In this version, osmotic's `userAgent`, `headers` and per-slot `proxy` options aren't applied in the browser, and
-  there are no `block`, `actions` or `passThrough` options as in the Playwright plugin. `args: ['--http-proxy', url]`
-  sets one proxy for every page.
+- It names itself in the `Sec-CH-UA` client hints, whatever the user agent.
+- In this version, there are no `actions` or `passThrough` options as in the Playwright plugin.
 - Lightpanda only publishes nightly builds, which `@lightpanda/browser` installs. This version was tested with
   `1.1.0-nightly.12159`.
 
