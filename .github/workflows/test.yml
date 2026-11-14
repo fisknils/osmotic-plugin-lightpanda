@@ -14,17 +14,25 @@ jobs:
       matrix:
         # The test runner needs Node.js 21 or later for its file glob, and the plugin needs the global WebSocket
         node-version: [22, 24]
+    env:
+      # @lightpanda/browser's install script skips its download when this is set, and the plugin
+      # and the tests start this binary. The script's download fails silently on runners (its
+      # unauthenticated GitHub API call), so the binary is downloaded with the workflow's token.
+      LIGHTPANDA_EXECUTABLE_PATH: ${{ runner.temp }}/lightpanda
     steps:
       - uses: actions/checkout@v6
+      - name: Download Lightpanda
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download nightly --repo lightpanda-io/browser --pattern lightpanda-x86_64-linux --output "$LIGHTPANDA_EXECUTABLE_PATH"
+          chmod +x "$LIGHTPANDA_EXECUTABLE_PATH"
+          "$LIGHTPANDA_EXECUTABLE_PATH" version
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
-      # Also downloads the Lightpanda binary, in @lightpanda/browser's install script
       - run: npm ci
-      # The install script doesn't fail npm ci when the download fails, so check for the binary here
-      - name: Check the Lightpanda binary
-        run: ~/.cache/lightpanda-node/lightpanda version
       - run: npm test
 
   format:
