@@ -1,0 +1,60 @@
+{
+	"name": "osmotic-plugin-lightpanda",
+	"version": "0.0.0",
+	"description": "osmotic plugin that renders pages with the lightweight Lightpanda browser, so content built by JavaScript can be scraped without Chromium",
+	"keywords": [
+		"osmotic-plugin",
+		"osmotic",
+		"lightpanda",
+		"scraper",
+		"headless",
+		"javascript-rendering"
+	],
+	"license": "ISC",
+	"author": {
+		"name": "fisknils",
+		"url": "https://github.com/fisknils"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/fisknils/osmotic-plugin-lightpanda.git"
+	},
+	"homepage": "https://github.com/fisknils/osmotic-plugin-lightpanda#readme",
+	"bugs": {
+		"url": "https://github.com/fisknils/osmotic-plugin-lightpanda/issues"
+	},
+	"type": "commonjs",
+	"main": "dist/index.cjs",
+	"types": "dist/index.d.cts",
+	"files": [
+		"dist",
+		"examples",
+		"README.md"
+	],
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"build": "npm run clean && tsc -p tsconfig.dist.json",
+		"prepublishOnly": "npm run build",
+		"clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+		"test": "npm run build && tsc && node --import tsx --test \"test/*.ts\"",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
+	},
+	"peerDependencies": {
+		"osmotic": "^3.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.19.2",
+		"prettier": "3.10.1",
+		"tsx": "^4.23.15",
+		"typescript": "^7.0.2"
+	}
+}
