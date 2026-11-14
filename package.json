@@ -1,6 +1,6 @@
 {
 	"name": "osmotic-plugin-lightpanda",
-	"version": "0.3.0",
+	"version": "1.0.0",
 	"description": "osmotic plugin that renders pages with the lightweight Lightpanda browser, so content built by JavaScript can be scraped without Chromium",
 	"keywords": [
 		"osmotic-plugin",
