@@ -41,7 +41,7 @@ export class LightpandaPool {
 	// Load req.url in a new page and return the rendered HTML as a Response
 	async render(req: FetchRequest, options: RenderOptions): Promise<Response> {
 		const session = await this.started();
-		const context = await this.context(session, '');
+		const context = await this.context(session, req.slot.proxy);
 		return renderPage(context, req, options);
 	}
 
@@ -63,14 +63,15 @@ export class LightpandaPool {
 		return { endpoint, child, contexts: new Map() };
 	}
 
-	// Pages with the same key share a browser context, so cookies persist across them
+	// Pages with the same proxy share a browser context, so cookies persist across them
 	// like in a regular browser session. A closed connection is replaced on the next request.
-	private context(session: Session, key: string): Promise<BrowserContext> {
+	private context(session: Session, proxy: string | undefined): Promise<BrowserContext> {
+		const key = proxy ?? '';
 		let context = session.contexts.get(key);
 		if (!context) {
 			context = (async () => {
 				const cdp = await CdpConnection.connect(session.endpoint);
-				const { browserContextId } = await cdp.send('Target.createBrowserContext');
+				const { browserContextId } = await cdp.send('Target.createBrowserContext', proxy ? { proxyServer: proxy } : {});
 				return { cdp, browserContextId };
 			})();
 			const created = context;

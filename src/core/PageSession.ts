@@ -13,6 +13,7 @@ interface Waiter {
 export class PageSession {
 	private readonly events: CdpEvent[] = [];
 	private readonly waiters = new Set<Waiter>();
+	private readonly handlers = new Set<(event: CdpEvent) => void>();
 	private readonly unsubscribe: () => void;
 
 	constructor(
@@ -22,12 +23,20 @@ export class PageSession {
 		this.unsubscribe = cdp.on((event) => {
 			if (event.sessionId !== sessionId) return;
 			this.events.push(event);
+			for (const handler of this.handlers) handler(event);
 			for (const waiter of this.waiters) {
 				if (waiter.match(event)) {
 					this.waiters.delete(waiter);
 					waiter.resolve(event);
 				}
 			}
+		});
+	}
+
+	/** Call `handler` with each of the page's events with this `method`, until the session is disposed. */
+	on(method: string, handler: (params: any) => void): void {
+		this.handlers.add((event) => {
+			if (event.method === method) handler(event.params);
 		});
 	}
 
@@ -78,5 +87,6 @@ export class PageSession {
 	dispose(): void {
 		this.unsubscribe();
 		this.waiters.clear();
+		this.handlers.clear();
 	}
 }
