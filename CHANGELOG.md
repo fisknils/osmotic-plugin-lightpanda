@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-14
+
+The API is now stable. No changes in behavior since 0.3.0.
+
+### Added
+
+- README: the limit of 16 distinct proxies at a time with Lightpanda's default `--cdp-max-connections`, and what
+  Lightpanda's watchdog does to a page stuck in an endless script.
+
 ## [0.3.0] - 2026-11-14
 
 ### Added
