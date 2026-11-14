@@ -16,12 +16,23 @@ jobs:
         node-version: [22, 24]
     steps:
       - uses: actions/checkout@v6
+      # @lightpanda/browser's install script skips its download when LIGHTPANDA_EXECUTABLE_PATH is
+      # set, and the plugin and the tests start that binary. The script's download fails silently
+      # on runners (its unauthenticated GitHub API call), so it's downloaded with the workflow's token.
+      - name: Download Lightpanda
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bin="$RUNNER_TEMP/lightpanda"
+          gh release download nightly --repo lightpanda-io/browser --pattern lightpanda-x86_64-linux --output "$bin"
+          chmod +x "$bin"
+          "$bin" version
+          echo "LIGHTPANDA_EXECUTABLE_PATH=$bin" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      # TODO: install the Lightpanda binary here once PLAN.md settles how (see "Decisions")
       - run: npm test
 
   format:
