@@ -34,6 +34,13 @@ export interface RenderOptions {
 	 * @defaultValue `30000`
 	 */
 	timeout?: number;
+	/**
+	 * Resource types to fail instead of requesting, such as `'script'`, `'xhr'`, `'fetch'`,
+	 * `'image'` or `'stylesheet'`. Lightpanda reports `fetch()` requests as `'xhr'`, so
+	 * `'fetch'` blocks those too.
+	 * @defaultValue `[]`
+	 */
+	block?: string[];
 }
 
 /** Options for the plugin. Render options set here are the defaults for every page. */

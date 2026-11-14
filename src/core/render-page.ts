@@ -1,6 +1,8 @@
 import type { FetchRequest } from 'osmotic';
 import type { RenderOptions } from '../types/options.js';
+import { lowercaseKeys } from '../utils/lowercase-keys.js';
 import { pageResponse } from '../utils/page-response.js';
+import { requestCookies } from '../utils/request-cookies.js';
 import { splitHeaders } from '../utils/split-headers.js';
 import { withTimeout } from '../utils/with-timeout.js';
 import type { CdpConnection, CdpEvent } from './CdpConnection.js';
@@ -38,6 +40,7 @@ export async function renderPage(
 			page.send('Network.enable'),
 			page.send('Page.setLifecycleEventsEnabled', { enabled: true }),
 		]);
+		await applyRequest(page, req, options.block ?? []);
 		const nav = await withTimeout(page.send('Page.navigate', { url: req.url }), timeout, `${req.url} to load`);
 		if (nav.errorText) throw new Error(`Couldn't load ${req.url}: ${nav.errorText}`);
 		const ofPage = (e: CdpEvent) => e.params?.frameId === undefined || e.params.frameId === nav.frameId;
@@ -80,6 +83,30 @@ export async function renderPage(
 		page?.dispose();
 		await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
 	}
+}
+
+// Apply osmotic's request headers to the page, and fail requests of the blocked resource types
+async function applyRequest(page: PageSession, req: FetchRequest, block: string[]): Promise<void> {
+	const { 'user-agent': userAgent, cookie, ...headers } = lowercaseKeys(req.headers);
+	// Also sets navigator.userAgent, so it matches the header
+	if (userAgent) await page.send('Emulation.setUserAgentOverride', { userAgent });
+	if (Object.keys(headers).length) await page.send('Network.setExtraHTTPHeaders', { headers });
+	// Cookies, unlike a header, go only to the page's site
+	if (cookie) await page.send('Network.setCookies', { cookies: requestCookies(cookie, req.url) });
+	if (!block.length) return;
+	const blocked = new Set(block.map((type) => type.toLowerCase()));
+	// Lightpanda reports fetch() requests as XHR
+	if (blocked.has('fetch')) blocked.add('xhr');
+	page.on('Fetch.requestPaused', ({ requestId, resourceType }) => {
+		const fail = blocked.has(String(resourceType).toLowerCase());
+		page
+			.send(
+				fail ? 'Fetch.failRequest' : 'Fetch.continueRequest',
+				fail ? { requestId, errorReason: 'BlockedByClient' } : { requestId },
+			)
+			.catch(() => {}); // The page may have closed meanwhile
+	});
+	await page.send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
 }
 
 // Resolve once an element matches `selector`, checking every POLL_MS
