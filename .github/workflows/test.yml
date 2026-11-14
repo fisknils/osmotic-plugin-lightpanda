@@ -20,8 +20,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+      # Also downloads the Lightpanda binary, in @lightpanda/browser's install script
       - run: npm ci
-      # TODO: install the Lightpanda binary here once PLAN.md settles how (see "Decisions")
+      # The install script doesn't fail npm ci when the download fails, so check for the binary here
+      - name: Check the Lightpanda binary
+        run: ~/.cache/lightpanda-node/lightpanda version
       - run: npm test
 
   format:
