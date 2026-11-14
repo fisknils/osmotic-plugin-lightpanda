@@ -1,3 +1,4 @@
+export { createProxy, type Proxy, type ProxyRequest } from './create-proxy.js';
 export { createSite, type Site, type SitePage, type SiteRequest } from './create-site.js';
 export {
 	isRunning,
