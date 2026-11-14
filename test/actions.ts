@@ -59,10 +59,11 @@ test('page.fill() sets the value and fires input and change', async () => {
 	const chain = new Osmotic()
 		.render({ actions: (page) => page.fill('#q', 'lightpanda') })
 		.get(site.url('/form'))
-		.set({ echo: '.echo', value: '#q@value' });
+		// The handlers echo q.value; the value attribute in the HTML doesn't change, as in any browser
+		.set({ echo: '.echo' });
 	const { rows, errors } = await runChain(chain);
 	assert.deepEqual(errors, []);
-	assert.deepEqual(rows, [{ echo: 'input:lightpanda change:lightpanda', value: 'lightpanda' }]);
+	assert.deepEqual(rows, [{ echo: 'input:lightpanda change:lightpanda' }]);
 });
 
 test('page.waitFor() waits for content that appears after an action', async () => {
