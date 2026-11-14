@@ -214,8 +214,7 @@ Osmotic.plugins([
 ```
 
 `lightpanda help serve` lists the arguments Lightpanda takes. Some useful ones: `--timezone`, `--locale`,
-`--block-urls`, `--load-resources image` (Lightpanda doesn't load images or stylesheets by default), and
-`--obey-robots`.
+`--block-urls`, `--load-resources image`, `--cdp-max-connections` and `--watchdog-ms`.
 
 ## osmotic options in the browser
 
@@ -228,7 +227,8 @@ Osmotic.plugins([
 | `delay`, `maxPages`    | As before: they apply to page loads, not to the requests a page makes.                  |
 
 The plugin keeps one browser context per proxy, so cookies persist across pages loaded through the same proxy, as in a
-normal browser session.
+normal browser session. Each context has its own connection to Lightpanda, which accepts 16 at a time by default; for
+more distinct proxies, raise it with `args: ['--cdp-max-connections', '64']`.
 
 osmotic's default user agent, `osmotic/0.1`, is sent by the browser too. Some sites treat unknown user agents
 differently; set `userAgent` if pages don't render as they do in your own browser. Lightpanda still names itself in
@@ -281,6 +281,8 @@ WebKit:
 - It names itself in the `Sec-CH-UA` client hints, whatever the user agent.
 - `actions` gets [a small page handle](#actions-and-the-page-handle) instead of Playwright's `Page`, so actions
   written for the Playwright plugin need rewriting. There is no mouse or keyboard input.
+- A page stuck in an endless script trips Lightpanda's watchdog after 30 seconds (`--watchdog-ms`), which closes the
+  connection to Lightpanda. Other pages loading through the same proxy fail with it; the next page reconnects.
 - Lightpanda only publishes nightly builds, which `@lightpanda/browser` installs. This version was tested with
   `1.1.0-nightly.12159`.
 
@@ -309,7 +311,8 @@ npm run format         # format everything with Prettier
 ```
 
 The tests use `node:test`, run against `src/` through `tsx`, serve their pages from a local HTTP server, and run the
-Lightpanda binary that `@lightpanda/browser` downloaded on `npm install`. Type tests in `test-d/` are compiled, never
+Lightpanda binary that `@lightpanda/browser` downloaded on `npm install`, or the one `LIGHTPANDA_EXECUTABLE_PATH`
+names, as in CI. Type tests in `test-d/` are compiled, never
 run.
 
 | File                              | Responsibility                                            |
